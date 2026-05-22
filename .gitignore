@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+venv/
+env/
+.venv/
+conda_env/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store
+
+# Logs
+logs/
+*.log
+wandb/
+tensorboard/
+runs/
+outputs/
+output/
+results/
+exp/
+experiments/
+
+# Checkpoints / weights
+*.pth
+*.pt
+*.ckpt
+*.pkl
+*.npz
+*.npy
+
+# Datasets
+data/
+datasets/
+dataset/
+PeopleSnapshot/
+ZJU-MoCap/
+subject_*/
+sequences/
+
+# Generated files
+*.mp4
+*.avi
+*.mov
+*.png
+*.jpg
+*.jpeg
+*.exr
+
+# CUDA / build cache
+build/
+dist/
+*.cu.o
+*.o
+*.egg
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+core.40402
