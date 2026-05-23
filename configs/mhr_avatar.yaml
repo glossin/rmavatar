@@ -1,0 +1,18 @@
+dataset:
+  frameset_type: mhr_avatar
+  dat_dir: ""  # train_rmavatar.py --dat_dir will override this in many RMAvatar configs
+  resolution: 1
+  data_device: cuda
+  cameras_extent: 1.0
+
+  # MHR assets used by dataset/mhr_instant_avatar_reader.py
+  mhr_model_path: /root/data1/project/sam-3d-body/checkpoints/sam-3d-body-dinov3/assets//mhr_model.pt
+
+  # MHR TorchScript often outputs cm-scale, Y-up vertices. Keep true at first.
+  use_mhr_coord_fix: true
+  precompute_vertices: true
+
+model:
+  # Keep original RMAvatar model settings.
+  # Start with --deform_on 0. When enabling pose rectification, change its pose input to 204-D MHR pose.
+  pose_dim: 204
