@@ -16,6 +16,7 @@ from utils.sh_utils import eval_sh
 from utils.sh_utils import eval_sh_bases
 from pytorch3d.transforms import quaternion_apply, quaternion_invert
 
+
 def render(viewpoint_camera, pc,pose, pipe,iteration,total_iteration,deform_on, bg_color,itr, scaling_modifier = 1.0, override_color = None,):
     """
     Render the scene. 

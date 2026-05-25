@@ -214,14 +214,14 @@ class MHRInstantAvatarDataset(torch.utils.data.Dataset):
         #   self._faces = ct.mesh.faces
         self.mhr_faces, self.mhr_rest_vertices = _load_faces_from_mhr_torchscript(self.mhr_model)
 
-        print("[MHR] model file:", mhr_model_file)
-        print("[MHR] rest_vertices:", tuple(self.mhr_rest_vertices.shape))
-        print("[MHR] faces:", tuple(self.mhr_faces.shape))
-        print(
-            "[MHR] faces min/max:",
-            int(self.mhr_faces.min().item()),
-            int(self.mhr_faces.max().item()),
-        )
+        # print("[MHR] model file:", mhr_model_file)
+        # print("[MHR] rest_vertices:", tuple(self.mhr_rest_vertices.shape))
+        # print("[MHR] faces:", tuple(self.mhr_faces.shape))
+        # print(
+        #     "[MHR] faces min/max:",
+        #     int(self.mhr_faces.min().item()),
+        #     int(self.mhr_faces.max().item()),
+        # )
 
         self.mhr_verts = None
         if self.precompute_vertices:
@@ -235,6 +235,12 @@ class MHRInstantAvatarDataset(torch.utils.data.Dataset):
         init_verts = self._get_vertices_cpu(0)[None]
         self.mesh_py3d = py3d_meshes.Meshes(init_verts, self.mhr_faces[None])
 
+        # if self.pred_cam_t is not None:
+        #     print("[MHR] pred_cam_t shape:", tuple(self.pred_cam_t.shape))
+        #     print("[MHR] pred_cam_t first:", self.pred_cam_t[0])
+        #     print("[MHR] pred_cam_t min:", self.pred_cam_t.min(dim=0).values)
+        #     print("[MHR] pred_cam_t max:", self.pred_cam_t.max(dim=0).values)
+
     def _forward_mhr_vertices(self, frame_idx: int) -> torch.Tensor:
         identity = self.identity_coeffs[None].to(self.mhr_device)
         model_params = self.model_parameters[frame_idx:frame_idx + 1].to(self.mhr_device)
@@ -247,6 +253,14 @@ class MHRInstantAvatarDataset(torch.utils.data.Dataset):
         vertices, _ = self.mhr_model(identity, model_params, expr)
 
         vertices = _mhr_to_rmavatar_space(vertices[0], self.use_mhr_coord_fix)
+
+        # 关键修复：把全局相机平移真正加到 mesh 顶点上
+        # 如果 pred_cam_t 是 SAM/HMR 常见的 camera translation，通常应该是米制相机坐标，
+        # 因此不要再乘 0.01，也不要再翻 y/z。
+        if self.pred_cam_t is not None:
+            t = self.pred_cam_t[frame_idx].to(vertices.device)
+            vertices = vertices + t[None, :]
+
         return vertices
 
     def _get_vertices_cpu(self, frame_idx: int) -> torch.Tensor:

@@ -69,3 +69,5 @@ dist/
 .ipynb_checkpoints/
 
 core.40402
+pytorch3d/
+out/

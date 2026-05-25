@@ -169,9 +169,11 @@ if __name__ == '__main__':
         white_background=gs_optim.optimizer_config.white_background
         deform_on = bool(args.deform_on)
         render_pkg = gs_model.render_to_camera(viewpoint_cam,pose, pipe,iteration,total_iteration,deform_on,white_background,itr = iteration)
+
         viewspace_point_tensor, visibility_filter, radii = render_pkg["viewspace_points"],render_pkg["visibility_filter"], render_pkg["radii"]
         image = render_pkg['render']
         gt_image = render_pkg['gt_image']
+
         if deform_on:
             offset = render_pkg['offset']
         gt_alpha_mask = render_pkg['gt_alpha_mask']
@@ -184,6 +186,23 @@ if __name__ == '__main__':
         else:
             loss = gs_optim.collect_loss(image, gt_image, loss_fn_vgg, visibility_filter, viewpoint_cam, tb_writer,iteration, gt_alpha_mask=gt_alpha_mask)
         loss['total'].backward()
+
+        ##打印 radii / visible / xyz 范围
+        # if iteration < 20 or iteration % 100 == 0:
+        #     xyz = gs_model.get_xyz.detach()
+        #     sc = gs_model.get_scaling.detach()
+        #
+        #     print(
+        #         f"[DBG] iter={iteration} "
+        #         f"visible={visibility_filter.sum().item()}/{visibility_filter.numel()} "
+        #         f"radii_min={radii.min().item():.6g} "
+        #         f"radii_max={radii.max().item():.6g} "
+        #         f"img_min={image.min().item():.6g} "
+        #         f"img_max={image.max().item():.6g}"
+        #     )
+        #     print("[DBG] xyz min:", xyz.min(dim=0).values.detach().cpu().numpy())
+        #     print("[DBG] xyz max:", xyz.max(dim=0).values.detach().cpu().numpy())
+        #     print("[DBG] scaling min/max:", sc.min().item(), sc.max().item())
 
         iter_end.record()
 
@@ -211,14 +230,14 @@ if __name__ == '__main__':
 
         # report testing
         #if iteration in testing_iterations:
-        test_iterations =  {2000, 5000, 8000,10000,11000,12000,16000,21000,26000,31000,35000,40000,45000,50000,55000,60000}
+        test_iterations =  {10000,21000,31000,40000,50000,55000,60000}
         #if iteration % 2000 == 0:
         if iteration in test_iterations : # or iteration % 5000 == 0:#10000
             current_time = timer.get_elapsed_time()
             run_testing(current_time,tb_writer,pipe, frameset_test, gs_model,deform_on,white_background, model_path, iteration,total_iteration, verify=verify)
 
         # save
-        save_iterations = {2000, 5000, 8000,11000,16000,21000,26000,31000,35000,40000,45000,50000,55000,60000}
+        save_iterations = {10000,21000,31000,40000,50000,55000,60000}
         #if iteration % save_every_iter == 0:
         if iteration in save_iterations : #or iteration % 5000 == 0:
             pc_dir = gs_optim.save_checkpoint(model_path, iteration)

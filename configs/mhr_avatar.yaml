@@ -2,7 +2,7 @@ dataset:
   frameset_type: mhr_avatar
   dat_dir: ""  # train_rmavatar.py --dat_dir will override this in many RMAvatar configs
   resolution: 1
-  data_device: cuda
+  data_device: cpu
   cameras_extent: 1.0
 
   # MHR assets used by dataset/mhr_instant_avatar_reader.py
