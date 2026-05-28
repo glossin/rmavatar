@@ -33,7 +33,30 @@ class SplattingAvatarModel(GaussianBase):
         self.config = config
         self.device = device
         self.verbose = verbose
+
+        # Make model config available to deformation net.
+        # argparse args does not automatically contain config.model fields.
+        if config is not None:
+            args.pose_dim = int(config.get("pose_dim", getattr(args, "pose_dim", 69)))
+            args.deform_pos_multires = int(config.get("deform_pos_multires", getattr(args, "deform_pos_multires", 6)))
+            args.pose_latent_dim = int(config.get("pose_latent_dim", getattr(args, "pose_latent_dim", 64)))
+            args.pose_hidden_dim = int(config.get("pose_hidden_dim", getattr(args, "pose_hidden_dim", 128)))
+            args.pose_dropout = float(config.get("pose_dropout", getattr(args, "pose_dropout", 0.0)))
+
+            args.use_pose_delta = bool(config.get("use_pose_delta", getattr(args, "use_pose_delta", True)))
+
+            # Residual ranges. MHR mesh already does the main body deformation,
+            # so these should stay small.
+            args.deform_xyz_scale = float(config.get("deform_xyz_scale", getattr(args, "deform_xyz_scale", 0.01)))
+            args.deform_scale_scale = float(
+                config.get("deform_scale_scale", getattr(args, "deform_scale_scale", 0.001)))
+            args.deform_rot_scale = float(config.get("deform_rot_scale", getattr(args, "deform_rot_scale", 0.05)))
+
         self._deformation = deform_network(args)
+
+        # Use first training frame pose as canonical pose for pose-delta conditioning.
+        if cano_mesh is not None and "pose" in cano_mesh:
+            self._deformation.set_cano_pose(cano_mesh["pose"])
 
         self.register_buffer('_xyz', torch.Tensor(0))
         self.register_buffer('_features_dc', torch.Tensor(0))

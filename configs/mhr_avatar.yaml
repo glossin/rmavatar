@@ -1,6 +1,7 @@
 dataset:
   frameset_type: mhr_avatar
-  dat_dir: ""  # train_rmavatar.py --dat_dir will override this in many RMAvatar configs
+  dat_dir: "/root/data1/datasets/PeopleSnapshot_MHR_RMAvatar/female-3-casual"  # train_rmavatar.py --dat_dir will override this in many RMAvatar configs
+  model_path: "/root/data1/project/rmavatar-mhr/out/female-3-casual-deform"
   resolution: 1
   data_device: cpu
   cameras_extent: 1.0
@@ -16,3 +17,19 @@ model:
   # Keep original RMAvatar model settings.
   # Start with --deform_on 0. When enabling pose rectification, change its pose input to 204-D MHR pose.
   pose_dim: 204
+
+  # MHR deformation network
+  use_pose_delta: true
+  deform_pos_multires: 6
+  pose_latent_dim: 64
+  pose_hidden_dim: 128
+  pose_dropout: 0.0
+
+  # MHR mesh already handles the main body deformation.
+  # Keep Gaussian residual deformation small.
+  deform_xyz_scale: 0.01
+  deform_scale_scale: 0.001
+  deform_rot_scale: 0.05
+
+optim:
+  lambda_offset: 0.1

@@ -227,6 +227,12 @@ if __name__ == '__main__':
             for key, value in loss.items():
                 if key != 'total':
                     tb_writer.add_scalar(f'Loss/{key}', value.item(), iteration)
+        if deform_on and offset is not None and iteration % 500 == 0:
+            print(
+                "[deform]",
+                "offset_mean=", offset.abs().mean().item(),
+                "offset_max=", offset.abs().max().item(),
+            )
 
         # report testing
         #if iteration in testing_iterations:

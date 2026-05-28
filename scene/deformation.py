@@ -16,6 +16,57 @@ from model.smplx_utils import smplx
 # from scene.grid import HashHexPlane
 from utils.network_util import initseq
 from roma import quat_product, quat_xyzw_to_wxyz, quat_wxyz_to_xyzw
+
+class PoseResidualMLP(nn.Module):
+    def __init__(
+        self,
+        pose_dim: int,
+        xyz_pe_dim: int,
+        pose_latent_dim: int = 64,
+        hidden_dim: int = 128,
+        dropout: float = 0.0,
+        out_dim: int = 10,
+    ):
+        super().__init__()
+
+        self.pose_encoder = nn.Sequential(
+            nn.LayerNorm(pose_dim),
+            nn.Linear(pose_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, pose_latent_dim),
+            nn.ReLU(inplace=True),
+        )
+
+        self.fc1 = nn.Sequential(
+            nn.Linear(pose_latent_dim + xyz_pe_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout),
+        )
+
+        self.fc2 = nn.Sequential(
+            nn.Linear(hidden_dim + xyz_pe_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout),
+        )
+
+        self.out = nn.Linear(hidden_dim, out_dim)
+
+    def zero_init_last(self):
+        nn.init.zeros_(self.out.weight)
+        nn.init.zeros_(self.out.bias)
+
+    def forward(self, pose, xyz_pe):
+        pose_z = self.pose_encoder(pose)
+        h = self.fc1(torch.cat([pose_z, xyz_pe], dim=-1))
+        h = self.fc2(torch.cat([h, xyz_pe], dim=-1))
+        return torch.tanh(self.out(h))
+
 class Deformation(nn.Module):
     def __init__(self, D=8, W=256,z=72,input_ch=27, input_ch_time=9, grid_pe=0, skips=[], args=None):
         super(Deformation, self).__init__()
@@ -121,22 +172,43 @@ class Deformation(nn.Module):
             nn.ReLU(),
             nn.Linear(self.W, 1)
         ).cuda()
+        ##替换代码从这里开始
+        pose_dim = int(getattr(self.args, "pose_dim", 69))
+        pos_multires = int(getattr(self.args, "deform_pos_multires", 6))
 
-        self.shs_deform = nn.Sequential(
-            nn.Linear(105, 128),#people 105  head 101
-            nn.ReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(164, 128),
-            nn.ReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(128, 10)
+        # get_embedder(..., include_input=False) with xyz input:
+        # xyz_pe_dim = 3 coords * sin/cos * num_freqs
+        xyz_pe_dim = 3 * 2 * pos_multires
+
+        pose_latent_dim = int(getattr(self.args, "pose_latent_dim", 64))
+        pose_hidden_dim = int(getattr(self.args, "pose_hidden_dim", 128))
+        pose_dropout = float(getattr(self.args, "pose_dropout", 0.0))
+
+        self.shs_deform = PoseResidualMLP(
+            pose_dim=pose_dim,
+            xyz_pe_dim=xyz_pe_dim,
+            pose_latent_dim=pose_latent_dim,
+            hidden_dim=pose_hidden_dim,
+            dropout=pose_dropout,
+            out_dim=10,
         ).cuda()
+
+
+        # self.shs_deform = nn.Sequential(
+        #     nn.Linear(105, 128),#people 105  head 101
+        #     nn.ReLU(),
+        #     nn.Dropout(p=0.5),
+        #     nn.Linear(128, 128),
+        #     nn.ReLU(),
+        #     nn.Dropout(p=0.5),
+        #     nn.Linear(164, 128),
+        #     nn.ReLU(),
+        #     nn.Dropout(p=0.5),
+        #     nn.Linear(128, 128),
+        #     nn.ReLU(),
+        #     nn.Dropout(p=0.5),
+        #     nn.Linear(128, 10)
+        # ).cuda()原版的代码替换成上面的
 
         # self.shs_deform = nn.Sequential(
         #     nn.Linear(105, 128),
@@ -290,6 +362,16 @@ class Deformation(nn.Module):
 class deform_network(nn.Module):
     def __init__(self, args) :
         super(deform_network, self).__init__()
+        #新增的成员变量
+        self.pose_dim = int(getattr(args, "pose_dim", 69))
+        self.deform_pos_multires = int(getattr(args, "deform_pos_multires", 6))
+        self.use_pose_delta = bool(getattr(args, "use_pose_delta", True))
+        self.deform_xyz_scale = float(getattr(args, "deform_xyz_scale", 0.01))
+        self.deform_scale_scale = float(getattr(args, "deform_scale_scale", 0.001))
+        self.deform_rot_scale = float(getattr(args, "deform_rot_scale", 0.05))
+        self.register_buffer("cano_pose", torch.zeros(self.pose_dim))
+        ####
+
         net_width = args.net_width if hasattr(args, 'net_width') else 64
         timebase_pe = args.timebase_pe if hasattr(args, 'timebase_pe') else 4
         defor_depth = args.defor_depth if hasattr(args, 'defor_depth') else 0
@@ -314,7 +396,20 @@ class deform_network(nn.Module):
         self.rotation_scaling_poc = self.rotation_scaling_poc.to(device)
         self.opacity_poc = self.opacity_poc.to(device)
         self.apply(initialize_weights)
+        #初始化权重后把最后一层清零
+        if hasattr(self.deformation_net.shs_deform, "zero_init_last"):
+            self.deformation_net.shs_deform.zero_init_last()
         # print(self)
+
+    def set_cano_pose(self, pose):
+        pose = pose.detach().float().view(-1)
+
+        if pose.numel() != self.pose_dim:
+            raise ValueError(
+                f"canonical pose dim mismatch: got {pose.numel()}, expected {self.pose_dim}"
+            )
+
+        self.cano_pose.copy_(pose.to(self.cano_pose.device))
 
     def save_deform_weights(self, model_path, iteration):
         out_weights_path = os.path.join(model_path, f"point_cloud/iteration_{iteration}")
@@ -343,42 +438,132 @@ class deform_network(nn.Module):
     def forward_static(self, points):
         points = self.deformation_net(points)
         return points
-    def forward_dynamic(self, point, scales=None, rotations=None, pose=None,iteration=None,total_iteration=None,scale_offset=None):
-        #point_emb = poc_fre(point,self.pos_poc)
-        device = point.device
-        pose = pose.to(device)
-        # point_emb0=torch.cat([pose.unsqueeze(0).repeat(point.shape[0], 1) , point], dim=-1)
-        # point_emb = nerf_positional_encoding(point_emb0)
+    #原版
+    # def forward_dynamic(self, point, scales=None, rotations=None, pose=None,iteration=None,total_iteration=None,scale_offset=None):
+    #
+    #     device = point.device
+    #     pose = pose.to(device)
+    #
+    #
+    #     pos_emb0 = get_embedder(iteration, multires=6, kick_in_iter=1, full_band_iter=total_iteration)[0](point)
+    #
+    #
+    #     if pose.shape[0] == 1:
+    #         point_emb = torch.cat([pose.repeat(point.shape[0], 1), pos_emb0], dim=-1)
+    #     else:
+    #         point_emb = torch.cat([pose.unsqueeze(0).repeat(point.shape[0], 1), pos_emb0], dim=-1)
+    #
+    #     for i in range(len(self.deformation_net.shs_deform)):
+    #         if i==4:
+    #             point_emb = torch.cat([point_emb, pos_emb0], dim=-1)
+    #         point_emb = self.deformation_net.shs_deform[i](point_emb)
+    #     offset = point_emb
+    #     means3D = point + offset[..., :3]
+    #
+    #     if scale_offset == None:
+    #         scales = scales + offset[..., 3:6]
+    #     else:
+    #         scales = torch.log(torch.clamp_min(scales + offset[..., 3:6], 1e-6))
+    #     delta_rot = offset[..., 6:]
+    #     q1 = delta_rot
+    #     q1[:, 0] = 1.
+    #     q2 = rotations
+    #     rotations = quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(q1), quat_wxyz_to_xyzw(q2)))
+    #     return means3D, scales, rotations,offset
 
-        pos_emb0 = get_embedder(iteration, multires=6, kick_in_iter=1, full_band_iter=total_iteration)[0](point)
-        #point_emb = torch.cat([pose.unsqueeze(0).repeat(point.shape[0], 1), pos_emb0], dim=-1)
+    def forward_dynamic(
+            self,
+            point,
+            scales=None,
+            rotations=None,
+            pose=None,
+            iteration=None,
+            total_iteration=None,
+            scale_offset=None,
+    ):
+        device = point.device
+        dtype = point.dtype
+
+        if pose is None:
+            offset_raw = torch.zeros(point.shape[0], 10, device=device, dtype=dtype)
+            return point, scales, rotations, offset_raw
+
+        pose = pose.to(device=device, dtype=dtype)
+
+        if pose.ndim == 1:
+            pose = pose.view(1, -1)
+        else:
+            pose = pose.reshape(pose.shape[0], -1)
+
+        if pose.shape[-1] != self.pose_dim:
+            raise RuntimeError(
+                f"pose_dim mismatch: got {pose.shape[-1]}, expected {self.pose_dim}"
+            )
 
         if pose.shape[0] == 1:
-            point_emb = torch.cat([pose.repeat(point.shape[0], 1), pos_emb0], dim=-1)
-        else:
-            point_emb = torch.cat([pose.unsqueeze(0).repeat(point.shape[0], 1), pos_emb0], dim=-1)
+            pose = pose.expand(point.shape[0], -1)
+        elif pose.shape[0] != point.shape[0]:
+            raise RuntimeError(
+                f"Unsupported pose batch: pose={pose.shape}, points={point.shape}"
+            )
 
-        for i in range(len(self.deformation_net.shs_deform)):
-            if i==4:
-                point_emb = torch.cat([point_emb, pos_emb0], dim=-1)
-            point_emb = self.deformation_net.shs_deform[i](point_emb)
-        offset = point_emb
-        means3D = point + offset[..., :3]
-        #scales = scales  + offset[..., 3:6]
-        if scale_offset == None:
-            scales = scales + offset[..., 3:6]
-        else:
-            scales = torch.log(torch.clamp_min(scales + offset[..., 3:6], 1e-6))
-        delta_rot = offset[..., 6:]
-        q1 = delta_rot
-        q1[:, 0] = 1.
-        q2 = rotations
-        rotations = quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(q1), quat_wxyz_to_xyzw(q2)))
-        return means3D, scales, rotations,offset
+        if self.use_pose_delta:
+            cano_pose = self.cano_pose.to(device=device, dtype=dtype).view(1, -1)
+            pose = pose - cano_pose
+
+        if iteration is None:
+            iteration = total_iteration if total_iteration is not None else 1
+
+        if total_iteration is None:
+            total_iteration = 50000
+
+        pos_emb0 = get_embedder(
+            iteration,
+            multires=self.deform_pos_multires,
+            kick_in_iter=1,
+            full_band_iter=total_iteration,
+        )[0](point)
+
+        offset_raw = self.deformation_net.shs_deform(pose, pos_emb0)
+
+        d_xyz = offset_raw[..., 0:3] * self.deform_xyz_scale
+        d_scale = offset_raw[..., 3:6] * self.deform_scale_scale
+        d_rot = offset_raw[..., 6:10] * self.deform_rot_scale
+
+        means3D = point + d_xyz
+
+        if scales is not None:
+            if scale_offset is None:
+                scales = torch.clamp_min(scales + d_scale, 1e-6)
+            else:
+                scales = torch.log(torch.clamp_min(scales + d_scale, 1e-6))
+
+        if rotations is not None:
+            # Keep quaternion residual small and stable.
+            delta_q = torch.cat(
+                [
+                    torch.ones_like(d_rot[..., 0:1]),
+                    d_rot[..., 1:4],
+                ],
+                dim=-1,
+            )
+            delta_q = F.normalize(delta_q, dim=-1)
+
+            rotations = quat_xyzw_to_wxyz(
+                quat_product(
+                    quat_wxyz_to_xyzw(delta_q),
+                    quat_wxyz_to_xyzw(rotations),
+                )
+            )
+            rotations = F.normalize(rotations, dim=-1)
+
+        return means3D, scales, rotations, offset_raw
+
     def get_mlp_parameters(self):
         return self.deformation_net.get_mlp_parameters() + list(self.timenet.parameters())
     def get_grid_parameters(self):
         return self.deformation_net.get_grid_parameters()
+
 
 def initialize_weights(m):
     if isinstance(m, nn.Linear):
