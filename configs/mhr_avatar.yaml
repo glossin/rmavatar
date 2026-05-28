@@ -1,17 +1,18 @@
 dataset:
   frameset_type: mhr_avatar
-  dat_dir: "/root/data1/datasets/PeopleSnapshot_MHR_RMAvatar/female-3-casual"  # train_rmavatar.py --dat_dir will override this in many RMAvatar configs
-  model_path: "/root/data1/project/rmavatar-mhr/out/female-3-casual-deform"
+  dat_dir: "/root/data1/project/rmavatar-mhr/datasets/PeopleSnapshot/female-3-casual"  # train_rmavatar.py --dat_dir will override this in many RMAvatar configs
+  model_path: "output/"
   resolution: 1
   data_device: cpu
   cameras_extent: 1.0
 
   # MHR assets used by dataset/mhr_instant_avatar_reader.py
-  mhr_model_path: /root/data1/project/sam-3d-body/checkpoints/sam-3d-body-dinov3/assets//mhr_model.pt
+  mhr_model_path: /root/data1/project/sam-3d-body/checkpoints/sam-3d-body-dinov3/assets/mhr_model.pt
 
   # MHR TorchScript often outputs cm-scale, Y-up vertices. Keep true at first.
   use_mhr_coord_fix: true
   precompute_vertices: true
+  mhr_params_path: mhr/model_params.npz
 
 model:
   # Keep original RMAvatar model settings.

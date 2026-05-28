@@ -1,0 +1,48 @@
+mhr_pose_refine:
+  split: train
+
+  # trained mhravatar checkpoint
+  iteration: 50000
+  pc_dir: /root/data1/project/rmavatar-mhr/out/female-3-casual-deform_on11/point_cloud/iteration_50000
+
+  deform_on: true
+  white_background: true
+
+  iters: 1500
+  save_every: 500
+  grad_clip: 1.0
+
+  # output full-length MHR params file
+  out_params: /root/data1/project/rmavatar-mhr/out/test/model_params_refined_train_predcam.npz
+
+  optimizer:
+    # First stage: do not optimize 204-D MHR pose.
+    optimize_model_parameters: false
+    optimize_expression: false
+
+    # Root translation refinement.
+    optimize_pred_cam_t: true
+    optimize_extra_transl: true
+
+    lr_model_parameters: 1.0e-6
+    lr_expression: 1.0e-6
+    lr_pred_cam_t: 5.0e-6
+    adam_eps: 1.0e-15
+
+    # Optional clamp.
+    # If your MHR scale is meters, 0.015 means about 1.5 cm.
+    max_pred_cam_t_delta: 0.015
+    max_model_delta: 0.0
+    max_expression_delta: 0.0
+
+  loss:
+    lambda_model_parameters: 0.0
+    lambda_expression: 0.0
+    lambda_pred_cam_t: 2.0e-1
+
+    lambda_smooth_model_parameters: 0.0
+    lambda_smooth_expression: 0.0
+    lambda_smooth_pred_cam_t: 2.0
+
+    # foreground-weighted RGB loss, optional but useful for silhouette alignment
+    lambda_fg_l1: 1.0

@@ -16,6 +16,31 @@ from model import libcore
 def _as_path(x) -> Path:
     return Path(os.path.expanduser(str(x))).resolve()
 
+def _resolve_optional_path(dat_dir: Path, path_value, default_path: Path) -> Path:
+    """
+    Resolve optional config path.
+
+    If path_value is None:
+        use default_path.
+    If path_value is absolute:
+        use it directly.
+    Otherwise:
+        first try current working directory relative path,
+        then dat_dir relative path.
+    """
+    if path_value is None:
+        return default_path
+
+    p = Path(os.path.expanduser(str(path_value)))
+
+    if p.is_absolute():
+        return p.resolve()
+
+    if p.exists():
+        return p.resolve()
+
+    return (dat_dir / p).resolve()
+
 
 def _load_image_rgba(image_path: Path, mask_path: Path):
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
@@ -182,7 +207,19 @@ class MHRInstantAvatarDataset(torch.utils.data.Dataset):
         self.frm_list = list(range(int(s["start"]), int(s["end"]) + 1, int(s.get("skip", 1))))
 
     def _load_mhr_assets_and_params(self):
-        mhr_npz = np.load(self.dat_dir / "mhr" / "model_params.npz")
+        default_mhr_npz = self.dat_dir / "mhr" / "model_params.npz"
+        self.mhr_params_path = _resolve_optional_path(
+            self.dat_dir,
+            self.config.get("mhr_params_path", None),
+            default_mhr_npz,
+        )
+
+        if not self.mhr_params_path.exists():
+            raise FileNotFoundError(f"MHR params npz not found: {self.mhr_params_path}")
+
+        print(f"[MHR] loading params from: {self.mhr_params_path}")
+
+        mhr_npz = np.load(self.mhr_params_path)
         self.model_parameters = torch.from_numpy(mhr_npz["model_parameters"].astype(np.float32))
         self.identity_coeffs = torch.from_numpy(mhr_npz["identity_coeffs"].astype(np.float32))
         if "expression_coeffs" in mhr_npz:
