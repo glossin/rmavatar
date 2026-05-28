@@ -1,0 +1,43 @@
+pose_refine:
+  split: test
+
+  # checkpoint
+  model_path: output-splatting/baseline+offset(5w)
+  iteration: 50000
+  pc_dir: /root/data1/project/RMAvatar/output/female-3-casual-no-refined-deform_on1/point_cloud/iteration_50000 #保存好的checkpoint路径
+
+  # render setting, 要和训练 checkpoint 保持一致
+  deform_on: 1
+  white_background: 1
+
+  # optimize setting
+  iters: 1
+  save_every: 1
+  grad_clip: 1.0
+
+  # 输出 refined pose
+  out_pose: /root/data1/project/RMAvatar/output/test/anim_nerf_test_rmavatar_refined.npz #输出路径<dat_dir>/poses/anim_nerf_<split>_rmavatar_refined.npz
+
+  optimizer:
+    optimize_body_pose: false
+    optimize_global_orient: true
+    optimize_transl: true
+    optimize_betas: false
+
+    lr_body_pose: 1.0e-6
+    lr_global_orient: 2.0e-6
+    lr_transl: 1.0e-5
+    lr_betas: 1.0e-7
+    adam_eps: 1.0e-15
+
+  loss:
+    lambda_body_pose: 1.0e-2
+    lambda_global_orient: 1.0e-2
+    lambda_transl: 1.0e-1
+
+    lambda_smooth_body_pose: 1.0e-1
+    lambda_smooth_global_orient: 1.0e-1
+    lambda_smooth_transl: 1.0
+
+    # 让 pose refine 更关注人体区域，减少白背景主导梯度
+    lambda_fg_l1: 1.0

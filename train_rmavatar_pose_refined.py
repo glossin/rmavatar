@@ -78,6 +78,49 @@ if __name__ == '__main__':
 
     gs_optim = SplattingAvatarOptimizer(gs_model, config.optim)
 
+    pose_refiner = None
+    pose_refine_cfg = config.optim.get("pose_refinement", None)
+
+    if pose_refine_cfg is not None and pose_refine_cfg.get("enable", False):
+        pose_refiner = PoseRefinementModule(
+            smpl_params=frameset_train.smpl_params,
+            smpl_config=frameset_train.smpl_config,
+            optimize_body_pose=pose_refine_cfg.get("optimize_body_pose", True),
+            optimize_global_orient=pose_refine_cfg.get("optimize_global_orient", True),
+            optimize_transl=pose_refine_cfg.get("optimize_transl", True),
+            optimize_betas=pose_refine_cfg.get("optimize_betas", False),
+            device="cuda",
+        ).cuda()
+
+        param_groups = []
+
+        if pose_refine_cfg.get("optimize_body_pose", True):
+            param_groups.append({
+                "params": [pose_refiner.delta_body_pose],
+                "lr": pose_refine_cfg.get("lr_body_pose", 1.0e-5),
+            })
+
+        if pose_refine_cfg.get("optimize_global_orient", True):
+            param_groups.append({
+                "params": [pose_refiner.delta_global_orient],
+                "lr": pose_refine_cfg.get("lr_global_orient", 1.0e-5),
+            })
+
+        if pose_refine_cfg.get("optimize_transl", True):
+            param_groups.append({
+                "params": [pose_refiner.delta_transl],
+                "lr": pose_refine_cfg.get("lr_transl", 5.0e-5),
+            })
+
+        if pose_refine_cfg.get("optimize_betas", False):
+            param_groups.append({
+                "params": [pose_refiner.delta_betas],
+                "lr": pose_refine_cfg.get("lr_betas", 1.0e-6),
+            })
+
+        gs_optim.smplx_optim = torch.optim.Adam(param_groups, eps=1e-15)
+
+        print("[PoseRefinement] enabled")
 
 
     ##################################################
@@ -142,6 +185,15 @@ if __name__ == '__main__':
                 mesh_info[k] = v.cuda(non_blocking=True)
         ###
 
+        pose_refine_enabled = (
+                pose_refiner is not None
+                and iteration >= pose_refine_cfg.get("start_iter", 0)
+        )
+
+        if pose_refine_enabled:
+            mesh_info = pose_refiner(batch["idx"])
+        else:
+            mesh_info = batch["mesh_info"]
 
         pose = mesh_info.get("pose", None)
 
@@ -188,6 +240,12 @@ if __name__ == '__main__':
             loss = gs_optim.collect_loss(image,gt_image,loss_fn_vgg, visibility_filter,viewpoint_cam,tb_writer,iteration,offset,gt_alpha_mask=gt_alpha_mask)
         else:
             loss = gs_optim.collect_loss(image, gt_image, loss_fn_vgg, visibility_filter, viewpoint_cam, tb_writer,iteration, gt_alpha_mask=gt_alpha_mask)
+        if pose_refine_enabled:
+            pose_losses = pose_refiner.regularization(batch["idx"], pose_refine_cfg)
+            for k, v in pose_losses.items():
+                loss[k] = v
+            loss["total"] = loss["total"] + sum(pose_losses.values())
+        loss['total'].backward()
 
         iter_end.record()
 
@@ -204,7 +262,7 @@ if __name__ == '__main__':
 
             gs_optim.adaptive_density_control(render_pkg, iteration)
 
-            gs_optim.step()
+            gs_optim.step(enable_smplx=pose_refine_enabled)
             gs_optim.zero_grad(set_to_none=True)
 
         if tb_writer:
@@ -217,6 +275,8 @@ if __name__ == '__main__':
         #if iteration in testing_iterations:
 
         test_iterations =  {2000, 5000, 8000,10000,11000,12000,16000,21000,26000,31000,35000,40000,45000,50000,55000,60000}
+        #test_iterations =  {50000}
+        #if iteration % 2000 == 0:
         if iteration in test_iterations : # or iteration % 5000 == 0:#10000
             current_time = timer.get_elapsed_time()
             run_testing(current_time,tb_writer,pipe, frameset_test, gs_model,deform_on,white_background, model_path, iteration,total_iteration, verify=verify)
@@ -227,6 +287,22 @@ if __name__ == '__main__':
         if iteration in save_iterations : #or iteration % 5000 == 0:
             pc_dir = gs_optim.save_checkpoint(model_path, iteration)
 
+            if pose_refiner is not None and pose_refine_cfg.get("export_refined_pose", True):
+                pose_refiner.export_npz(
+                    os.path.join(pc_dir, "train_rmavatar_refined.npz")
+                )
+            if pose_refiner is not None:
+                torch.save(
+                    {
+                        "iteration": iteration,
+                        "pose_refiner": pose_refiner.state_dict(),
+                        "pose_optimizer": (
+                            gs_optim.smplx_optim.state_dict()
+                            if gs_optim.smplx_optim is not None else None
+                        ),
+                    },
+                    os.path.join(pc_dir, "pose_refiner_ckpt.pth"),
+                )
 
             libcore.write_tensor_image(os.path.join(pc_dir, 'gt_image.jpg'), gt_image, rgb2bgr=True)
             libcore.write_tensor_image(os.path.join(pc_dir, 'render.jpg'), image, rgb2bgr=True)
