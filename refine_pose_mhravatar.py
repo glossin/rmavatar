@@ -1,6 +1,6 @@
 """
 python refine_pose_mhravatar.py \
-  --dat_dir /root/data1/datasets/PeopleSnapshot_preprocessed/female-3-casual \
+  --dat_dir /root/data1/project/rmavatar-mhr/datasets/PeopleSnapshot/111/male-3-casual \
   --configs "configs/peoplesnapshot.yaml;configs/mhr_avatar.yaml;configs/refine_pose_mhravatar.yaml"
 """
 

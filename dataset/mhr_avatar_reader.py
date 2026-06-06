@@ -51,8 +51,55 @@ def _load_image_rgba(image_path: Path, mask_path: Path):
         raise FileNotFoundError(mask_path)
     if mask.ndim == 3:
         mask = mask[..., 0]
-    mask = (mask > 0).astype(np.uint8) * 255
-    return np.concatenate([image, mask[..., None]], axis=-1)
+    # ------------------------------------------------------------
+    # Convert the input mask to a clean 0/255 uint8 binary alpha.
+    #
+    # Supports:
+    #   - 0/1 mask
+    #   - 0/255 mask
+    #   - float mask in [0, 1]
+    #   - float/int mask in [0, 255]
+    # ------------------------------------------------------------
+    mask = np.asarray(mask)
+
+    if np.issubdtype(mask.dtype, np.floating):
+        mask = np.nan_to_num(mask, nan=0.0, posinf=255.0, neginf=0.0)
+        if mask.max() <= 1.0:
+            mask_u8 = np.clip(mask * 255.0, 0.0, 255.0).astype(np.uint8)
+        else:
+            mask_u8 = np.clip(mask, 0.0, 255.0).astype(np.uint8)
+    else:
+        if mask.max() <= 1:
+            mask_u8 = mask.astype(np.uint8) * 255
+        else:
+            mask_u8 = np.clip(mask, 0, 255).astype(np.uint8)
+
+    # Use >127 instead of >0 to avoid expanding tiny non-zero noise.
+    alpha = (mask_u8 > 127).astype(np.uint8) * 255
+
+    # ------------------------------------------------------------
+    # BetterRigs-style soft alpha generation:
+    #   1. erode 5x5
+    #   2. Gaussian blur 3x3
+    #
+    # This creates a soft boundary while slightly shrinking the
+    # foreground first, reducing background-color contamination.
+    # ------------------------------------------------------------
+    erode_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    alpha = cv2.erode(alpha, erode_kernel, iterations=1)
+
+    alpha = cv2.GaussianBlur(alpha, (3, 3), 0)
+
+    # Make sure alpha and image have the same spatial size.
+    if alpha.shape[:2] != image.shape[:2]:
+        alpha = cv2.resize(
+            alpha,
+            (image.shape[1], image.shape[0]),
+            interpolation=cv2.INTER_LINEAR,
+        )
+    #mask = (mask > 0).astype(np.uint8) * 255
+    return np.concatenate([image, alpha[..., None]], axis=-1)
+    #return np.concatenate([image, mask[..., None]], axis=-1)
 
 
 def _make_camera_from_npz(cameras_npz: Path):

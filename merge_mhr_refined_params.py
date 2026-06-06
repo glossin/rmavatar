@@ -1,9 +1,9 @@
 """
 python merge_mhr_refined_params.py \
-  --dat_dir datasets/PeopleSnapshot/female-3-casual \
-  --train_refined /root/data1/project/rmavatar-mhr/out/test/model_params_refined_train_predcam.npz \
-  --test_refined /root/data1/project/rmavatar-mhr/out/test/model_params_refined_test_predcam.npz \
-  --out /root/data1/project/rmavatar-mhr/out/test//model_params_refined_train_test_predcam.npz
+  --dat_dir /root/data1/project/rmavatar-mhr/datasets/PeopleSnapshot/111/male-3-casual \
+  --train_refined /root/data1/project/rmavatar-mhr/out/mhr_round1/model_params_refined_train_predcam.npz \
+  --test_refined /root/data1/project/rmavatar-mhr/out/mhr_round1/model_params_refined_test_predcam.npz \
+  --out data1/project/rmavatar-mhr/out/mhr_round1/model_params_refined.npz
 """
 import argparse
 import json

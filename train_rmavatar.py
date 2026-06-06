@@ -1,3 +1,10 @@
+"""
+python train_rmavatar.py \
+  --config "configs/peoplesnapshot.yaml;configs/mhr_avatar.yaml" \
+  --dat_dir /root/data1/project/rmavatar-mhr/datasets/PeopleSnapshot/111/female-3-casual \
+  --deform_on 1 \
+  --model_path /root/data1/project/rmavatar-mhr/out/mhr_mask/female-3-casual
+"""
 import os
 from pathlib import Path
 import torch
@@ -236,11 +243,11 @@ if __name__ == '__main__':
 
         # report testing
         #if iteration in testing_iterations:
-        test_iterations =  {2000, 5000, 8000,10000,11000,12000,16000,21000,26000,31000,35000,40000,45000,50000,55000,60000}
-        #if iteration % 2000 == 0:
-        if iteration in test_iterations : # or iteration % 5000 == 0:#10000
-            current_time = timer.get_elapsed_time()
-            run_testing(current_time,tb_writer,pipe, frameset_test, gs_model,deform_on,white_background, model_path, iteration,total_iteration, verify=verify)
+        # test_iterations =  {2000, 5000, 8000,10000,11000,12000,16000,21000,26000,31000,35000,40000,45000,50000,55000,60000}
+        # #if iteration % 2000 == 0:
+        # if iteration in test_iterations : # or iteration % 5000 == 0:#10000
+        #     current_time = timer.get_elapsed_time()
+        #     run_testing(current_time,tb_writer,pipe, frameset_test, gs_model,deform_on,white_background, model_path, iteration,total_iteration, verify=verify)
 
         # save
         save_iterations = {2000, 5000, 8000,11000,16000,21000,26000,31000,35000,40000,45000,50000,55000,60000}

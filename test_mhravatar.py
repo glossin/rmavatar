@@ -6,10 +6,10 @@ Standalone evaluator for mhravatar / RMAvatar mhr-rmavatar branch.
 Example:
   python test_mhravatar.py \
     --configs  "configs/peoplesnapshot.yaml;configs/mhr_avatar.yaml" \
-    --dat_dir /root/data1/datasets/PeopleSnapshot_preprocessed/female-3-casual \
-    --model_path /root/data1/project/rmavatar-mhr/out/female-3-casual-deform_on11 \ #checkpoint的路径 有iteration 50000 会加上//point_cloud/iteration_50000/point_cloud.ply
-    --out_dir /root/data1/project/rmavatar-mhr/out/test \
-    --iteration 50000 \ #不加iteration会默认找最新的
+    --dat_dir /root/data1/project/rmavatar-mhr/datasets/PeopleSnapshot/111/male-3-casual \
+    --model_path /root/data1/project/rmavatar-mhr/out/mhr_female/female-3-casual \
+    --out_dir /root/data1/project/rmavatar-mhr/out/mhr_female/female-3-casual \
+    --iteration 50000 \
     --deform_on 1
 
 If --configs is omitted, the script reads <model_path>/config.yaml and still
